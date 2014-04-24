@@ -25,6 +25,5 @@ CHIP PC {
     Mux16(a=loadOut, b=false, sel=reset, out=resetOut);
 
     // out
-    Register(in=resetOut, load=true, out=registerOut);
-    And16(a=registerOut, b=true, out=out);
+    Register(in=resetOut, load=true, out=registerOut, out=out);
 }
