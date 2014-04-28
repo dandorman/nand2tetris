@@ -5,24 +5,24 @@
 
 /**
  * The Central Processing unit (CPU).
- * Consists of an ALU and a set of registers, designed to fetch and 
+ * Consists of an ALU and a set of registers, designed to fetch and
  * execute instructions written in the Hack machine language.
  * In particular, functions as follows:
- * Executes the inputted instruction according to the Hack machine 
+ * Executes the inputted instruction according to the Hack machine
  * language specification. The D and A in the language specification
  * refer to CPU-resident registers, while M refers to the external
- * memory location addressed by A, i.e. to Memory[A]. The inM input 
- * holds the value of this location. If the current instruction needs 
- * to write a value to M, the value is placed in outM, the address 
- * of the target location is placed in the addressM output, and the 
- * writeM control bit is asserted. (When writeM=0, any value may 
- * appear in outM). The outM and writeM outputs are combinational: 
- * they are affected instantaneously by the execution of the current 
- * instruction. The addressM and pc outputs are clocked: although they 
- * are affected by the execution of the current instruction, they commit 
- * to their new values only in the next time unit. If reset=1 then the 
- * CPU jumps to address 0 (i.e. sets pc=0 in next time unit) rather 
- * than to the address resulting from executing the current instruction. 
+ * memory location addressed by A, i.e. to Memory[A]. The inM input
+ * holds the value of this location. If the current instruction needs
+ * to write a value to M, the value is placed in outM, the address
+ * of the target location is placed in the addressM output, and the
+ * writeM control bit is asserted. (When writeM=0, any value may
+ * appear in outM). The outM and writeM outputs are combinational:
+ * they are affected instantaneously by the execution of the current
+ * instruction. The addressM and pc outputs are clocked: although they
+ * are affected by the execution of the current instruction, they commit
+ * to their new values only in the next time unit. If reset=1 then the
+ * CPU jumps to address 0 (i.e. sets pc=0 in next time unit) rather
+ * than to the address resulting from executing the current instruction.
  */
 
 CHIP CPU {
@@ -34,10 +34,49 @@ CHIP CPU {
                          // the current program (reset=0).
 
     OUT outM[16],        // M value output
-        writeM,          // Write into M? 
+        writeM,          // Write into M?
         addressM[15],    // Address in data memory (of M)
         pc[15];          // address of next instruction
 
     PARTS:
-    // Put your code here:
+    /* decode instruction */
+    DMux(in=true, sel=instruction[15], a=addrinst, b=compinst);
+    And16(a=instruction, b=true, out[0]=cj3, out[1]=cj2, out[2]=cj1,
+                                 out[3]=cd3, out[4]=cd2, out[5]=cd1,
+                                 out[6]=cc6, out[7]=cc5, out[8]=cc4, out[9]=cc3, out[10]=cc2, out[11]=cc1,
+                                 out[12]=ca,
+                                 out[0..14]=aaddr);
+
+    /* A register */
+    Mux16(sel=addrinst, a=aluout, b=instruction, out=ain);
+    Or(a=cd1, b=addrinst, out=aload);
+    ARegister(in=ain, load=aload, out=aout, out[0..14]=addressM);
+
+    /* D register */
+    And(a=cd2, b=compinst, out=dload);
+    DRegister(in=aluout, load=dload, out=dout);
+
+    /* ALU */
+    Mux16(sel=ca, a=aout, b=inM, out=aorm);
+    ALU(x=dout, y=aorm, zx=cc1, nx=cc2, zy=cc3, ny=cc4, f=cc5, no=cc6, out=aluout, out=outM, zr=zr, ng=ng);
+    And(a=cd3, b=compinst, out=writeM);
+
+    /* jump? */
+
+    // check for positive output
+    Or(a=zr, b=ng, out=zrandng);
+    Not(in=zrandng, out=ps);
+
+    And(a=cj1, b=ng, out=jlt);
+    And(a=cj2, b=zr, out=jeq);
+    And(a=cj3, b=ps, out=jgt);
+
+    // compute whether to jump
+    Or(a=jlt, b=jeq, out=jmp1);
+    Or(a=jmp1, b=jgt, out=jmp2);
+    And(a=jmp2, b=compinst, out=jmp);
+
+    /* program counter */
+    Not(in=jmp, out=inc);
+    PC(in=aout, load=jmp, inc=inc, reset=reset, out[0..14]=pc);
 }
